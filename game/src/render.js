@@ -11,15 +11,30 @@ import { laneAttack, resonates } from './state.js';
 import { intentText } from './ai.js';
 
 export function drawSigil(ctx, sigil, x, y, r) {
+  // Silhouettes differ at a glance, even in grayscale: Sun is a plain
+  // disc, Tide a round droplet, Grove a leaf on a stem, and Ember a
+  // three-tongued flame - never three lookalike pointed ovals.
   const s = SIGILS[sigil];
   ctx.save();
   ctx.fillStyle = s.color; ctx.strokeStyle = s.dark; ctx.lineWidth = 2;
   ctx.beginPath();
   if (s.shape === 'disc') { ctx.arc(x, y, r, 0, Math.PI * 2); }
-  else if (s.shape === 'drop') { ctx.moveTo(x, y - r); ctx.bezierCurveTo(x + r, y + r * 0.2, x + r * 0.6, y + r, x, y + r); ctx.bezierCurveTo(x - r * 0.6, y + r, x - r, y + r * 0.2, x, y - r); }
-  else if (s.shape === 'leaf') { ctx.moveTo(x, y - r); ctx.bezierCurveTo(x + r, y - r * 0.2, x + r * 0.7, y + r * 0.8, x, y + r); ctx.bezierCurveTo(x - r * 0.7, y + r * 0.8, x - r, y - r * 0.2, x, y - r); }
-  else { ctx.moveTo(x, y - r); ctx.bezierCurveTo(x + r * 0.8, y + r * 0.1, x + r * 0.45, y + r, x, y + r); ctx.bezierCurveTo(x - r * 0.45, y + r, x - r * 0.8, y + r * 0.1, x, y - r); }
+  else if (s.shape === 'drop') { ctx.moveTo(x, y - r); ctx.bezierCurveTo(x + r * 0.95, y + r * 0.25, x + r * 0.62, y + r, x, y + r); ctx.bezierCurveTo(x - r * 0.62, y + r, x - r * 0.95, y + r * 0.25, x, y - r); }
+  else if (s.shape === 'leaf') { ctx.moveTo(x, y - r); ctx.bezierCurveTo(x + r, y - r * 0.2, x + r * 0.7, y + r * 0.7, x, y + r * 0.8); ctx.bezierCurveTo(x - r * 0.7, y + r * 0.7, x - r, y - r * 0.2, x, y - r); }
+  else {
+    // Ember: three flame tongues.
+    ctx.moveTo(x, y + r);
+    ctx.bezierCurveTo(x - r * 0.9, y + r * 0.5, x - r * 0.75, y - r * 0.1, x - r * 0.42, y - r * 0.42);
+    ctx.bezierCurveTo(x - r * 0.30, y - r * 0.05, x - r * 0.22, y + r * 0.05, x - r * 0.10, y - r * 0.15);
+    ctx.bezierCurveTo(x - r * 0.02, y - r * 0.55, x + r * 0.05, y - r * 0.8, x, y - r);
+    ctx.bezierCurveTo(x + r * 0.28, y - r * 0.55, x + r * 0.34, y - r * 0.25, x + r * 0.44, y - r * 0.48);
+    ctx.bezierCurveTo(x + r * 0.85, y - r * 0.05, x + r * 0.9, y + r * 0.5, x, y + r);
+  }
   ctx.closePath(); ctx.fill(); ctx.stroke();
+  if (s.shape === 'leaf') {
+    ctx.beginPath(); ctx.moveTo(x, y + r * 0.8); ctx.quadraticCurveTo(x + r * 0.15, y + r * 0.1, x, y - r * 0.75);
+    ctx.strokeStyle = s.dark; ctx.lineWidth = 2; ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -32,17 +47,38 @@ function rr(ctx, x, y, w, h, r) {
 }
 
 function portrait(ctx, card, x, y, w, h) {
-  // A simple bold silhouette per card, drawn from its sigil shape so
-  // no two suits share a picture.
+  // A bold silhouette with an identity, not just the suit token:
+  // creatures stand as a hooded figure in their sigil's dark colour
+  // (a SWIFT blade, an ARMORED shield or a RALLY banner by trait),
+  // spells burst as an eight-point star.
   const cx = x + w / 2, cy = y + h / 2;
+  const s = SIGILS[card.sigil];
   ctx.save();
   ctx.fillStyle = 'rgba(255,255,255,0.16)';
   rr(ctx, x, y, w, h, 8); ctx.fill();
-  drawSigil(ctx, card.sigil, cx, cy, Math.min(w, h) * 0.30);
-  ctx.fillStyle = 'rgba(20,12,40,0.75)';
-  ctx.font = 'bold 15px system-ui'; ctx.textAlign = 'center';
-  const glyph = { sun: '☀', tide: '≈', grove: '❧', ember: '♨' }[card.sigil];
-  ctx.fillText(glyph, cx, cy + 6);
+  if (card.kind === 'spell') {
+    ctx.fillStyle = s.dark;
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2, rad = i % 2 ? h * 0.16 : h * 0.34;
+      const px = cx + Math.cos(a) * rad, py = cy + Math.sin(a) * rad;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath(); ctx.fill();
+    drawSigil(ctx, card.sigil, cx, cy, h * 0.15);
+  } else {
+    ctx.fillStyle = s.dark;
+    ctx.beginPath(); ctx.arc(cx, cy - h * 0.18, h * 0.16, 0, Math.PI * 2); ctx.fill(); // head
+    ctx.beginPath(); // shoulders and robe
+    ctx.moveTo(cx - w * 0.26, cy + h * 0.42);
+    ctx.quadraticCurveTo(cx, cy - h * 0.18, cx + w * 0.26, cy + h * 0.42);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = s.dark; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    if (card.trait === 'swift') { ctx.beginPath(); ctx.moveTo(cx + w * 0.10, cy + h * 0.30); ctx.lineTo(cx + w * 0.34, cy - h * 0.28); ctx.stroke(); }
+    if (card.trait === 'rally') { ctx.beginPath(); ctx.moveTo(cx - w * 0.30, cy + h * 0.38); ctx.lineTo(cx - w * 0.30, cy - h * 0.34); ctx.stroke(); ctx.fillStyle = s.color; ctx.fillRect(cx - w * 0.30, cy - h * 0.34, w * 0.20, h * 0.16); }
+    if (card.trait === 'armored') { ctx.beginPath(); ctx.arc(cx + w * 0.28, cy + h * 0.05, h * 0.17, 0, Math.PI * 2); ctx.fillStyle = s.color; ctx.fill(); ctx.stroke(); }
+    drawSigil(ctx, card.sigil, cx, cy + h * 0.13, h * 0.11);
+  }
   ctx.restore();
 }
 
@@ -51,7 +87,7 @@ export function drawCard(ctx, card, x, y, w = CARD_W, h = CARD_H, opts = {}) {
   ctx.save();
   if (opts.lift) { ctx.shadowColor = 'rgba(242,182,60,.8)'; ctx.shadowBlur = 22; ctx.translate(0, -10); }
   rr(ctx, x, y, w, h, 12);
-  ctx.fillStyle = opts.dim ? '#4a4266' : '#f7efdb'; ctx.fill();
+  ctx.fillStyle = '#f7efdb'; ctx.fill();
   ctx.lineWidth = opts.selected ? 5 : 3; ctx.strokeStyle = opts.selected ? GOLD : s.dark; ctx.stroke();
   ctx.shadowBlur = 0;
   // Frame band in the sigil colour.
@@ -72,14 +108,23 @@ export function drawCard(ctx, card, x, y, w = CARD_W, h = CARD_H, opts = {}) {
     ctx.fillText(trait ? `${trait.label} - ${trait.text}` : 'A sigil creature of the duel table.', x + 10, y + h * 0.60, w - 20);
     if (card.resonated) { ctx.fillStyle = '#b3541e'; ctx.font = 'bold 11px system-ui'; ctx.fillText('★ RESONATED +1/+1', x + 10, y + h * 0.60 + 15); }
     // Attack sword bottom-left, health heart bottom-right: huge.
+    // Board creatures show their EFFECTIVE attack (RALLY included),
+    // the number combat will actually use.
     ctx.font = 'bold 30px system-ui';
-    ctx.fillStyle = '#b3372a'; ctx.fillText(`⚔${card.curAtk}`, x + 8, y + h - 10);
+    ctx.fillStyle = '#b3372a'; ctx.fillText(`⚔${opts.effAtk ?? card.curAtk}`, x + 8, y + h - 10);
     ctx.fillStyle = '#2e7d46'; ctx.textAlign = 'right'; ctx.fillText(`♥${card.curHp}`, x + w - 8, y + h - 10);
   } else {
     ctx.font = '12px system-ui';
     wrapText(ctx, card.text, x + 10, y + h * 0.60, w - 20, 15);
     ctx.font = 'bold 13px system-ui'; ctx.fillStyle = s.dark; ctx.textAlign = 'center';
     ctx.fillText('✦ SPELL ✦', x + w / 2, y + h - 12);
+  }
+  if (opts.dim) {
+    // Unaffordable: keep the cream face readable, veil the whole
+    // card instead of repainting it a muddy colour.
+    rr(ctx, x, y, w, h, 12); ctx.fillStyle = 'rgba(23,17,43,0.48)'; ctx.fill();
+    ctx.fillStyle = '#ffd9d0'; ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(`NEED ${card.cost} MANA`, x + w / 2, y + h - 26);
   }
   ctx.restore();
 }
@@ -220,8 +265,7 @@ function drawTable(ctx, state, ui) {
       ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(244,236,216,0.35)'; ctx.stroke(); ctx.setLineDash([]);
       const c = side.board[l];
       if (c) {
-        drawCard(ctx, c, lane.x + 14, y, CARD_W, CARD_H, {});
-        if (side === p && laneAttack(p, l) !== c.curAtk) { /* rally shown on card via atk already includes in clash */ }
+        drawCard(ctx, c, lane.x + 14, y, CARD_W, CARD_H, { effAtk: laneAttack(side, l) });
       } else {
         drawSigil(ctx, ['sun', 'tide', 'grove'][l], lane.x + LANE_W / 2, y + CARD_H / 2, 20);
         ctx.fillStyle = INK_DIM; ctx.font = '13px system-ui'; ctx.textAlign = 'center';
@@ -242,9 +286,18 @@ function drawTable(ctx, state, ui) {
   for (const f of state.floaters) {
     ctx.save(); ctx.globalAlpha = Math.max(0, 1 - f.t / 1.1);
     ctx.fillStyle = f.color;
-    const x = LANES[f.lane].x + LANE_W / 2;
-    const y = (f.side === 'player' ? 560 : 240) - f.t * 34;
-    ctx.fillText(f.text, x, y); ctx.restore();
+    if (f.side === 'face-rival' || f.side === 'face-player') {
+      // Face damage lands on the orb itself, with a pulse ring.
+      const oy = f.side === 'face-rival' ? 108 : 520;
+      ctx.beginPath(); ctx.arc(1130, oy, 44 + f.t * 26, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffd34d'; ctx.lineWidth = 4; ctx.stroke();
+      ctx.fillText(f.text, 1130, oy - 58 - f.t * 20);
+    } else {
+      const x = LANES[f.lane].x + LANE_W / 2;
+      const y = (f.side === 'player' ? 560 : 240) - f.t * 34;
+      ctx.fillText(f.text, x, y);
+    }
+    ctx.restore();
   }
 
   // Resonance meter: one pip per sigil played this turn.
@@ -274,34 +327,63 @@ function drawTable(ctx, state, ui) {
   else { ctx.fillStyle = GOLD; ctx.font = 'bold 18px system-ui'; ctx.fillText(state.phase === 'clash' ? 'CLASH!' : 'MISTRAL PLAYS…', 1064, 668); }
 }
 
-function drawEnd(ctx, state, won) {
-  ctx.save(); ctx.textAlign = 'center';
-  if (won) {
-    ctx.save(); ctx.globalAlpha = 0.55;
-    for (let i = 0; i < 36; i++) {
-      const a = (i / 36) * Math.PI * 2, rad = 300 + (i % 4) * 34;
-      drawSigil(ctx, ['sun', 'tide', 'grove', 'ember'][i % 4], W / 2 + Math.cos(a) * rad, 300 + Math.sin(a) * rad * 0.62, 12);
+function drawFinalTable(ctx, state) {
+  // The table the duel ended on, kept under the result panel: both
+  // boards, both hands and both orbs, so the end screens still show
+  // a card game, not just a label.
+  const p = state.player, r = state.rival;
+  r.hand.forEach((_, i) => cardBack(ctx, 430 + i * 62, 6, 54, 74));
+  p.hand.forEach((card, i) => drawCard(ctx, card, 380 + i * 126, 622, HAND_W, HAND_H, {}));
+  LANES.forEach((lane, l) => {
+    for (const [y, side] of [[ENEMY_BOARD_Y, r], [PLAYER_BOARD_Y, p]]) {
+      const c = side.board[l];
+      if (c) drawCard(ctx, c, lane.x + 14, y, CARD_W, CARD_H, { effAtk: laneAttack(side, l) });
     }
-    ctx.restore();
-    ctx.fillStyle = GOLD; ctx.font = 'bold 68px system-ui';
-    ctx.fillText('VICTORY!', W / 2, 240);
-    ctx.fillStyle = INK; ctx.font = '22px system-ui';
-    ctx.fillText(`Mistral's life orb shatters on turn ${state.turn}. The table is yours.`, W / 2, 292);
-    ctx.font = '18px system-ui'; ctx.fillStyle = INK_DIM;
-    ctx.fillText(`Your life remaining: ${Math.max(0, state.player.life)} - Cards left in your deck: ${state.player.deck.length}`, W / 2, 330);
-    ctx.fillText('Spoils: the Ember Sigil, Mistral\'s gilded card back, and the table\'s respect.', W / 2, 362);
+  });
+  lifeOrb(ctx, 1130, 108, r.life, 'MISTRAL', '#e4573d');
+  lifeOrb(ctx, 1130, 520, p.life, 'YOU', '#57b96a');
+}
+
+function drawEnd(ctx, state, won) {
+  // The final table stays on screen; the verdict lives in a panel
+  // in the empty left column, with the final life totals big.
+  drawFinalTable(ctx, state);
+  ctx.save();
+  rr(ctx, 14, 150, 322, 480, 18);
+  ctx.fillStyle = 'rgba(18,11,36,0.92)'; ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = won ? GOLD : '#e4573d'; ctx.stroke();
+  ctx.textAlign = 'center';
+  const cx = 175;
+  if (won) {
+    ['sun', 'tide', 'grove', 'ember'].forEach((sigil, i) => drawSigil(ctx, sigil, 65 + i * 74, 196, 15));
+    ctx.fillStyle = GOLD; ctx.font = 'bold 46px system-ui';
+    ctx.fillText('VICTORY!', cx, 268);
+    ctx.fillStyle = INK; ctx.font = '17px system-ui';
+    ctx.fillText(`Mistral's orb shatters`, cx, 312);
+    ctx.fillText(`on turn ${state.turn}.`, cx, 336);
+    ctx.font = 'bold 21px system-ui'; ctx.fillStyle = '#57b96a';
+    ctx.fillText(`YOU ${Math.max(0, state.player.life)}  -  MISTRAL 0`, cx, 386);
+    ctx.font = '15px system-ui'; ctx.fillStyle = INK_DIM;
+    ctx.fillText(`Cards left in your deck: ${state.player.deck.length}`, cx, 424);
+    ctx.fillText('The winning board is', cx, 470);
+    ctx.fillText('still on the table.', cx, 492);
   } else {
-    ctx.strokeStyle = '#e4573d'; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.arc(W / 2, 250, 74, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(W / 2 - 50, 200); ctx.lineTo(W / 2 - 8, 252); ctx.lineTo(W / 2 + 26, 216); ctx.lineTo(W / 2 + 10, 300); ctx.stroke();
-    ctx.fillStyle = '#e4573d'; ctx.font = 'bold 68px system-ui';
-    ctx.fillText('DEFEAT', W / 2, 410);
-    ctx.fillStyle = INK; ctx.font = '22px system-ui';
-    ctx.fillText(`Your life orb cracked on turn ${state.turn}. Mistral kept her lanes blocked`, W / 2, 452);
-    ctx.fillText('and read every resonance you telegraphed.', W / 2, 482);
-    ctx.font = '18px system-ui'; ctx.fillStyle = INK_DIM;
-    ctx.fillText(`Mistral's life remaining: ${Math.max(0, state.rival.life)} - Watch her intent banner and block the named lane.`, W / 2, 520);
+    ctx.strokeStyle = '#e4573d'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(cx, 216, 34, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - 22, 192); ctx.lineTo(cx - 4, 218); ctx.lineTo(cx + 12, 198); ctx.lineTo(cx + 4, 244); ctx.stroke();
+    ctx.fillStyle = '#e4573d'; ctx.font = 'bold 46px system-ui';
+    ctx.fillText('DEFEAT', cx, 300);
+    ctx.fillStyle = INK; ctx.font = '17px system-ui';
+    ctx.fillText(`Your orb cracked`, cx, 344);
+    ctx.fillText(`on turn ${state.turn}.`, cx, 368);
+    ctx.font = 'bold 21px system-ui'; ctx.fillStyle = '#e4573d';
+    ctx.fillText(`YOU 0  -  MISTRAL ${Math.max(0, state.rival.life)}`, cx, 418);
+    ctx.font = '15px system-ui'; ctx.fillStyle = INK_DIM;
+    ctx.fillText('Her Serpent and Golem', cx, 462);
+    ctx.fillText('held the lanes. Watch the', cx, 484);
+    ctx.fillText('threat banner and block', cx, 506);
+    ctx.fillText('the named lane.', cx, 528);
   }
-  button(ctx, { x: W / 2 - 130, y: 560, w: 260, h: 56 }, '↻  REMATCH', won ? '#2e7d46' : '#b3372a');
+  button(ctx, { x: 35, y: 552, w: 280, h: 54 }, '↻  REMATCH', won ? '#2e7d46' : '#b3372a');
   ctx.restore();
 }

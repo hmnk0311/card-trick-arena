@@ -33,6 +33,10 @@ if (!shotMode) computeIntent(state);
 let rivalTimer = null;
 
 function onPhaseChange(what) {
+  if (what === 'spellEnd') {
+    if (state.winner === 'player') sfx.win(); else sfx.lose();
+    return;
+  }
   if (what === 'restart') {
     state = newDuel((Math.random() * 1e9) | 0);
     computeIntent(state);

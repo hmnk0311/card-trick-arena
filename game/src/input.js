@@ -6,6 +6,7 @@
 
 import { LANES, LANE_W, ENEMY_BOARD_Y, PLAYER_BOARD_Y, CARD_H, HAND_W, HAND_H } from './config.js';
 import { playCreature, castSpell, endPlayerTurn } from './state.js';
+import { computeIntent } from './ai.js';
 import { sfx } from './audio.js';
 
 export function handCardRect(state, i) {
@@ -19,28 +20,35 @@ export function boardRect(side, lane) {
 
 function inside(x, y, r) { return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h; }
 
+// After a spell resolves: refresh the threat banner for the new
+// board, and if the spell ended the duel, hand the ending over.
+function afterBoardChange(state, onPhaseChange) {
+  computeIntent(state);
+  if (state.phase === 'over') onPhaseChange('spellEnd');
+}
+
 export function handleClick(state, ui, x, y, onPhaseChange) {
   if (state.screen === 'title') {
     if (inside(x, y, ui.buttons.start)) { state.screen = 'duel'; sfx.place(); }
     return;
   }
   if (state.screen === 'victory' || state.screen === 'defeat') {
-    if (inside(x, y, { x: 640 - 130, y: 560, w: 260, h: 56 })) onPhaseChange('restart');
+    if (inside(x, y, { x: 35, y: 552, w: 280, h: 54 })) onPhaseChange('restart');
     return;
   }
   if (state.phase !== 'play') return;
 
   // Life orbs are spell targets (Bolt / Verdict on a face).
   if (state.pendingSpell) {
-    if (Math.hypot(x - 1130, y - 108) < 48) { if (castSpell(state, state.selectedHand, { type: 'face', side: 'rival' })) sfx.spell(); return; }
-    if (Math.hypot(x - 1130, y - 520) < 48) { if (castSpell(state, state.selectedHand, { type: 'face', side: 'player' })) sfx.spell(); return; }
+    if (Math.hypot(x - 1130, y - 108) < 48) { if (castSpell(state, state.selectedHand, { type: 'face', side: 'rival' })) { sfx.spell(); afterBoardChange(state, onPhaseChange); } return; }
+    if (Math.hypot(x - 1130, y - 520) < 48) { if (castSpell(state, state.selectedHand, { type: 'face', side: 'player' })) { sfx.spell(); afterBoardChange(state, onPhaseChange); } return; }
   }
 
   // Board creatures are spell targets.
   if (state.pendingSpell) {
     for (const side of ['player', 'rival']) for (let lane = 0; lane < 3; lane++) {
       if (state[side].board[lane] && inside(x, y, boardRect(side, lane))) {
-        if (castSpell(state, state.selectedHand, { type: 'creature', side, lane })) sfx.spell();
+        if (castSpell(state, state.selectedHand, { type: 'creature', side, lane })) { sfx.spell(); afterBoardChange(state, onPhaseChange); }
         return;
       }
     }
@@ -62,7 +70,7 @@ export function handleClick(state, ui, x, y, onPhaseChange) {
   if (state.selectedHand >= 0 && !state.pendingSpell) {
     for (let lane = 0; lane < 3; lane++) {
       const slot = { x: LANES[lane].x, y: PLAYER_BOARD_Y, w: LANE_W, h: CARD_H };
-      if (inside(x, y, slot)) { if (playCreature(state, state.selectedHand, lane)) sfx.place(); return; }
+      if (inside(x, y, slot)) { if (playCreature(state, state.selectedHand, lane)) { sfx.place(); computeIntent(state); } return; }
     }
   }
 
@@ -85,6 +93,6 @@ export function handleKey(state, ui, key, onPhaseChange) {
   } else if (key === 'Escape') { state.selectedHand = -1; state.pendingSpell = null; }
   else if (['q', 'w', 'e'].includes(key.toLowerCase())) {
     const lane = ['q', 'w', 'e'].indexOf(key.toLowerCase());
-    if (state.selectedHand >= 0 && !state.pendingSpell) { if (playCreature(state, state.selectedHand, lane)) sfx.place(); }
+    if (state.selectedHand >= 0 && !state.pendingSpell) { if (playCreature(state, state.selectedHand, lane)) { sfx.place(); computeIntent(state); } }
   } else if (key === 'Enter') { endPlayerTurn(state); sfx.clash(); onPhaseChange('clash'); }
 }

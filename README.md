@@ -19,18 +19,20 @@ turn (the Draw & Forge phase).
   apart by colour and shape: Sun (gold disc), Tide (blue drop),
   Grove (green leaf), Ember (red flame).
 - **Traits** — SWIFT attacks the turn it lands, ARMORED ignores 1
-  damage from each hit, RALLY gives lane allies +1 attack.
+  damage from each hit, RALLY gives your other creatures +1 attack
+  (board cards always show the effective, RALLY-included attack).
 - **Resonance** — play two cards of one sigil in a single turn and
   the second resonates: creatures gain +1/+1, spells hit harder.
   The meter under the table tracks every sigil.
 - **Clash** — at End Turn your board attacks down its lanes. A
   creature fights the creature facing it (combat is simultaneous);
   an empty lane means the blow lands on the rival's life orb.
-- **Readable rival** — Mistral's intent banner names the exact card
-  and lane she will strike with next, so you can block that lane,
-  remove the creature, or race her. She plays her biggest creature
-  into her weakest lane and holds Ember Bolt for creatures she
-  cannot trade into.
+- **Readable rival** — the threat banner names the strongest
+  attack her ready board poses right now (card, lane and damage,
+  refreshed after every card you play or remove), so you can block
+  that lane, remove the creature, or race her. She plays her
+  biggest creature into her leftmost empty lane and casts all four
+  of her spells through the same rules you use.
 
 First life orb to zero falls. Win and loss screens tally the duel
 and offer a rematch.

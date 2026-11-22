@@ -4,15 +4,15 @@
 // green leaf, Ember a red flame. Card frames, lane gems and the
 // resonance meter all reuse these same shapes so a thumbnail reads.
 
-export const W = 1280;
-export const H = 800;
-
 export const SIGILS = {
   sun:   { name: 'Sun',   color: '#f2b63c', dark: '#8a5d10', shape: 'disc' },
   tide:  { name: 'Tide',  color: '#3fa7e0', dark: '#175a85', shape: 'drop' },
   grove: { name: 'Grove', color: '#57b96a', dark: '#256b35', shape: 'leaf' },
   ember: { name: 'Ember', color: '#e4573d', dark: '#8c2b18', shape: 'flame' },
 };
+
+export const W = 1280;
+export const H = 800;
 
 export const INK = '#f4ecd8';
 export const INK_DIM = '#b9aed6';

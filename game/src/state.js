@@ -50,7 +50,10 @@ function freshSide(seed) {
 export function drawCard(side) {
   if (!side.deck.length) return null;
   const card = side.deck.pop();
-  if (side.hand.length < HAND_LIMIT) side.hand.push(card); else side.deck.unshift(card);
+  // A full hand cannot take the card: it goes to the bottom of the
+  // deck and the draw honestly reports that nothing was drawn.
+  if (side.hand.length >= HAND_LIMIT) { side.deck.unshift(card); return null; }
+  side.hand.push(card);
   return card;
 }
 
@@ -66,9 +69,10 @@ export function canPlay(state, card) {
   return state.screen === 'duel' && state.phase === 'play' && card.cost <= state.player.mana;
 }
 
-// Resonance: second card of a sigil in the same turn.
+// Resonance: exactly the second card of a sigil in the same turn
+// resonates; the third and later cards of that sigil do not.
 export function resonates(side, card) {
-  return side.playedSigils.includes(card.sigil);
+  return side.playedSigils.filter((s) => s === card.sigil).length === 1;
 }
 
 export function playCreature(state, handIdx, lane) {
@@ -94,12 +98,18 @@ export function castSpell(state, handIdx, target) {
   const card = p.hand[handIdx];
   if (!card || card.kind !== 'spell' || !canPlay(state, card)) return false;
   const res = resonates(p, card);
-  const ok = resolveSpell(state, 'player', card, target, res);
-  if (!ok) return false;
-  p.mana -= card.cost;
+  // Remove the spell from the hand BEFORE resolving it, so a spell
+  // that draws a card (Undertow) frees its own slot first; put it
+  // back untouched when the target turns out to be illegal.
   p.hand.splice(handIdx, 1);
+  const ok = resolveSpell(state, 'player', card, target, res);
+  if (!ok) { p.hand.splice(handIdx, 0, card); return false; }
+  p.mana -= card.cost;
   p.playedSigils.push(card.sigil);
   state.selectedHand = -1; state.pendingSpell = null;
+  // A spell can end the duel on the spot (a lethal Bolt): check
+  // before anything else gets a chance to act.
+  checkEnd(state);
   return true;
 }
 
@@ -109,10 +119,13 @@ export function resolveSpell(state, ownerKey, card, target, res) {
   const foe = state[foeKey];
   const bonus = res ? 1 : 0;
   if (card.spell === 'bolt') {
-    if (target.type === 'face') { hurtFace(state, foeKey, 2 + bonus); }
+    // A face target hits the duelist whose orb was actually chosen.
+    if (target.type === 'face') { hurtFace(state, target.side, 2 + bonus); }
     else if (!damageCreature(state, target.side, target.lane, 2 + bonus)) return false;
   } else if (card.spell === 'verdict') {
-    if (target.type === 'face') { me.life = Math.min(START_LIFE + 6, me.life + 4 + bonus); state.message = `${card.name} mends you.`; }
+    // Verdict mends only the caster's own orb; on a creature it judges.
+    if (target.type === 'face' && target.side === ownerKey) { me.life = Math.min(START_LIFE, me.life + 4 + bonus); state.message = `${card.name} mends its caster.`; }
+    else if (target.type === 'face') return false;
     else if (!damageCreature(state, target.side, target.lane, 3 + bonus)) return false;
   } else if (card.spell === 'undertow') {
     if (target.type === 'face' || !damageCreature(state, target.side, target.lane, 2 + bonus)) return false;
@@ -134,14 +147,16 @@ export function damageCreature(state, sideKey, lane, amount) {
   let dmg = amount;
   if (c.trait === 'armored') dmg = Math.max(0, dmg - 1);
   c.curHp -= dmg;
-  state.floaters.push({ lane, side: sideKey, text: `-${dmg}`, color: '#ff7a5c', t: 0 });
+  state.floaters.push({ lane, side: sideKey, text: dmg === 0 && amount > 0 ? '🛡 SHIELD' : `-${dmg}`, color: dmg === 0 ? '#bdeaff' : '#ff7a5c', t: 0 });
   if (c.curHp <= 0) { state.message = `${c.name} falls!`; side.board[lane] = null; }
   return true;
 }
 
 export function hurtFace(state, sideKey, amount) {
   state[sideKey].life -= amount;
-  state.floaters.push({ lane: 1, side: sideKey, text: `-${amount} LIFE`, color: '#ffd34d', t: 0 });
+  // Face damage floats at the orb that actually took it (the render
+  // layer places side 'face-rival' / 'face-player' on the orbs).
+  state.floaters.push({ lane: 1, side: sideKey === 'rival' ? 'face-rival' : 'face-player', text: `-${amount} LIFE`, color: '#ffd34d', t: 0 });
   state.shake = Math.min(10, state.shake + 4);
 }
 
@@ -183,6 +198,7 @@ export function checkEnd(state) {
 
 export function endPlayerTurn(state) {
   if (state.phase !== 'play') return;
+  state.selectedHand = -1; state.pendingSpell = null;
   state.phase = 'clash';
   clash(state, 'player');
   if (state.phase === 'over') return;

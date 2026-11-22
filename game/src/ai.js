@@ -1,17 +1,24 @@
-// ai.js - Mistral, the rival duelist. Her plan is never hidden: at
-// the start of your turn the intent banner names the exact card and
-// lane she will strike with, so you can block that lane, remove the
-// creature, or race her. She plays by three readable rules:
-//   1. Spend mana on the biggest creature she can afford, into the
-//      lane where she is weakest (or emptiest).
+// ai.js - Mistral, the rival duelist. Her ready board is never
+// hidden: the threat banner names the strongest attack it poses
+// (card, lane, damage) and is recomputed after every board change,
+// so you can block that lane, remove the creature, or race her.
+// She plays by three readable rules:
+//   1. Spend mana on the biggest creature she can afford, into her
+//      leftmost empty lane.
 //   2. Hold Ember Bolt to finish a creature she cannot trade into.
 //   3. Attack every lane she can - she never passes a free hit.
 // Her intent is recomputed after she plays, so what you read during
 // your Play phase is the clash that is actually coming.
 
-import { drawCard, clash, damageCreature, hurtFace, resonates } from './state.js';
+import { drawCard, clash, damageCreature, hurtFace, resonates, resolveSpell, laneAttack } from './state.js';
 import { MAX_MANA_CAP } from './config.js';
 
+// The banner advertises her READY board: the strongest threat her
+// already-deployed creatures pose right now, recomputed after every
+// board change (input.js refreshes it whenever the player plays or
+// removes a card), using the same effective-attack maths as combat
+// itself, RALLY bonuses included. An unblocked life hit always
+// outranks a blocked clash, however big the clash is.
 export function computeIntent(state) {
   const r = state.rival;
   let best = null;
@@ -19,8 +26,9 @@ export function computeIntent(state) {
     const c = r.board[lane];
     if (!c || (c.justPlayed && c.trait !== 'swift')) continue;
     const blocked = !!state.player.board[lane];
-    const dmg = c.curAtk + (r.board.some((a) => a && a !== c && a.trait === 'rally') ? 1 : 0);
-    if (!best || (!blocked && best.blocked) || dmg > best.dmg) best = { lane, card: c, dmg, blocked };
+    const dmg = laneAttack(r, lane);
+    const score = (blocked ? 0 : 1000) + dmg;
+    if (!best || score > best.score) best = { lane, card: c, dmg, blocked, score };
   }
   state.rivalIntent = best;
   return best;
@@ -28,10 +36,10 @@ export function computeIntent(state) {
 
 export function intentText(state) {
   const i = state.rivalIntent;
-  if (!i) return 'Mistral has no ready attacker. Her lanes are quiet - push!';
+  if (!i) return 'Board threat: none. Mistral has no ready attacker - push!';
   const where = `lane ${i.lane + 1}`;
-  if (i.blocked) return `Mistral intends: ${i.card.name} clashes in ${where} for ${i.dmg}.`;
-  return `Mistral intends: ${i.card.name} hits YOUR LIFE for ${i.dmg} in ${where} - block it!`;
+  if (i.blocked) return `Board threat: ${i.card.name} clashes in ${where} for ${i.dmg}.`;
+  return `Board threat: ${i.card.name} hits YOUR LIFE for ${i.dmg} in ${where} - block it!`;
 }
 
 // Runs the rival's whole turn: forge, play, clash. Called by main
@@ -66,20 +74,44 @@ export function runRivalTurn(state) {
     state.message = `Mistral plays ${card.name} in lane ${lane + 1}.`;
   }
 
-  // Bolt a player creature she cannot profitably trade into.
-  const boltIdx = r.hand.findIndex((c) => c.spell === 'bolt' && c.cost <= r.mana);
-  if (boltIdx >= 0) {
-    let targetLane = -1;
-    for (let l = 0; l < 3; l++) {
-      const c = state.player.board[l];
-      if (c && c.curHp <= 2 && (!state.rival.board[l] || state.rival.board[l].curAtk < c.curHp)) targetLane = l;
+  // Spells, through the same shared resolution as the player's:
+  // Growth fattens her biggest creature, Verdict removes a creature
+  // it can kill (or mends her when she is low), Undertow removes a
+  // small creature and draws, Bolt finishes what her lanes cannot.
+  // She casts at most ONE spell a turn - a deliberate duelist, and
+  // it keeps her readable instead of machine-gunning her hand.
+  for (let spellsCast = 0; spellsCast < 1;) {
+    let cast = false;
+    for (let i = 0; i < r.hand.length && !cast; i++) {
+      const card = r.hand[i];
+      if (card.kind !== 'spell' || card.cost > r.mana) continue;
+      const res = resonates(r, card);
+      let target = null;
+      if (card.spell === 'growth') {
+        let lane = -1, best = -1;
+        r.board.forEach((c, l) => { if (c && c.curAtk > best) { best = c.curAtk; lane = l; } });
+        if (lane >= 0) target = { type: 'creature', side: 'rival', lane };
+      } else if (card.spell === 'verdict') {
+        let lane = -1;
+        state.player.board.forEach((c, l) => { if (c && c.curHp <= 3 + (res ? 1 : 0)) lane = l; });
+        if (lane >= 0) target = { type: 'creature', side: 'player', lane };
+        else if (r.life <= 9) target = { type: 'face', side: 'rival' };
+      } else if (card.spell === 'undertow' || card.spell === 'bolt') {
+        let lane = -1;
+        state.player.board.forEach((c, l) => { if (c && c.curHp <= 2 + (res ? 1 : 0)) lane = l; });
+        if (lane >= 0) target = { type: 'creature', side: 'player', lane };
+        else if (card.spell === 'bolt' && state.player.life <= 2 + (res ? 1 : 0)) target = { type: 'face', side: 'player' };
+      }
+      if (target && resolveSpell(state, 'rival', card, target, res)) {
+        r.hand.splice(i, 1);
+        r.mana -= card.cost;
+        r.playedSigils.push(card.sigil);
+        state.message = `Mistral casts ${card.name}!`;
+        cast = true;
+      }
     }
-    if (targetLane >= 0) {
-      const card = r.hand.splice(boltIdx, 1)[0];
-      r.mana -= card.cost;
-      damageCreature(state, 'player', targetLane, 2);
-      state.message = `Mistral bolts your creature in lane ${targetLane + 1}!`;
-    }
+    if (!cast) break;
+    spellsCast++;
   }
 
   clash(state, 'rival');
